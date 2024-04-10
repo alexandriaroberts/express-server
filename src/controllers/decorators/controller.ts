@@ -5,8 +5,22 @@ import { MetadataKeys } from './MetadataKeys';
 import { Request, Response, NextFunction, RequestHandler } from 'express';
 
 function bodyValidators(keys: string): RequestHandler {
-  return function (req: Request, res: Response, next: NextFunction) {};
+  return function (req: Request, res: Response, next: NextFunction) {
+    if (!req.body) {
+      res.status(422).send('Invalid Request');
+      return;
+    }
+
+    for (let key of keys) {
+      if (!req.body[key]) {
+        res.status(422).send('Invalid Request');
+        return;
+      }
+    }
+    next();
+  };
 }
+
 export function controller(routePrefix: string) {
   return function (target: Function) {
     const router = AppRouter.getInstance();
@@ -28,8 +42,19 @@ export function controller(routePrefix: string) {
         Reflect.getMetadata(MetadataKeys.middleware, target.prototype, key) ||
         [];
 
+      const requireBodyProps =
+        Reflect.getMetadata(MetadataKeys.validator, target.prototype, key) ||
+        [];
+
+      // Code below connects the request handler with middleware
+      const validator = bodyValidators(requireBodyProps);
       if (path) {
-        router[method](`${routePrefix}${path}`, ...middlewares, routeHandler);
+        router[method](
+          `${routePrefix}${path}`,
+          ...middlewares,
+          validator,
+          routeHandler
+        );
       }
     });
   };
